@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Task, CalendarEvent, Note, Habit, AppNotification, UserProfile, AppSettings, ChatMessage, ChatSession } from '../types';
+import { Task, CalendarEvent, Note, Habit, AppNotification, UserProfile, AppSettings, ChatMessage, ChatSession, getLocalDateString } from '../types';
 import { StorageService } from '../lib/storageService';
 import { auth, db, isFirebaseConfigured, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
@@ -32,7 +32,7 @@ interface AppContextType {
   renameChat: (id: string, newTitle: string) => void;
   clearChat: (id: string) => void;
   clearAllChats: () => void;
-  addMessageToChat: (chatId: string, role: 'user' | 'model', content: string, actionProposal?: ChatMessage['actionProposal']) => Promise<void>;
+  addMessageToChat: (chatId: string, role: 'user' | 'model', content: string, actionProposal?: ChatMessage['actionProposal'], attachments?: Attachment[]) => Promise<void>;
   updateMessageActionStatus: (chatId: string, messageId: string, status: 'pending' | 'confirmed' | 'cancelled', updatedData?: any) => void;
   regenerateResponse: (chatId: string) => Promise<void>;
 
@@ -399,7 +399,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveChatId(null);
   };
 
-  const addMessageToChat = async (chatId: string, role: 'user' | 'model', content: string, actionProposal?: ChatMessage['actionProposal']) => {
+  const addMessageToChat = async (chatId: string, role: 'user' | 'model', content: string, actionProposal?: ChatMessage['actionProposal'], attachments?: Attachment[]) => {
     let targetChatId = chatId;
     if (!targetChatId) {
       // Create a chat automatically if none active
@@ -412,6 +412,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       content,
       createdAt: new Date().toISOString(),
       actionProposal,
+      attachments,
     };
 
     // Calculate updated messages array based on the latest state
@@ -470,6 +471,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             message: content,
             history: chatToUpdate?.messages || [],
             context: contextData,
+            userLocalTime: new Date().toString(), // local time string including timezone info
+            attachments: attachments || [],
           }),
         });
 
@@ -877,8 +880,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const today = getLocalDateString(new Date());
+    const yesterday = getLocalDateString(new Date(Date.now() - 86400000));
 
     const hasCompletedRecent = history[today] || history[yesterday];
     if (!hasCompletedRecent) {
@@ -890,7 +893,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let checkDate = history[today] ? new Date() : new Date(Date.now() - 86400000);
 
     while (true) {
-      const dateStr = checkDate.toISOString().split('T')[0];
+      const dateStr = getLocalDateString(checkDate);
       if (history[dateStr]) {
         currentStreak++;
         checkDate.setDate(checkDate.getDate() - 1);

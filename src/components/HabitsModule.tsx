@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Habit } from '../types';
+import { Habit, getLocalDateString } from '../types';
 import { 
   Plus, 
   Flame, 
@@ -56,7 +56,7 @@ export const HabitsModule: React.FC = () => {
   };
 
   const past7Days = getPast7Days();
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString(new Date());
 
   const handleOpenAdd = () => {
     setEditingHabit(null);
@@ -322,7 +322,7 @@ export const HabitsModule: React.FC = () => {
                 <span className="text-4xs text-slate-400 font-bold block md:hidden uppercase tracking-wider font-mono">7d Log:</span>
                 <div className="flex items-center gap-1.5">
                   {past7Days.map((dayDate) => {
-                    const dStr = dayDate.toISOString().split('T')[0];
+                    const dStr = getLocalDateString(dayDate);
                     const isDone = !!habit.history?.[dStr];
                     const isTodayCell = dStr === todayStr;
 

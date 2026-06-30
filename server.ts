@@ -136,7 +136,7 @@ const tools = [
 // AI Chat API route
 app.post("/api/gemini/chat", async (req, res) => {
   try {
-    const { message, history, context } = req.body;
+    const { message, history, context, userLocalTime } = req.body;
 
     if (!process.env.GEMINI_API_KEY) {
       return res.status(500).json({ 
@@ -150,26 +150,103 @@ app.post("/api/gemini/chat", async (req, res) => {
 
     // Format productivity context for the system instruction
     let formattedContext = "No productivity data available yet.";
+    let productivityStatsStr = "";
+
+    // Safely extract current local date
+    let localDateObj = new Date();
+    if (userLocalTime) {
+      try {
+        localDateObj = new Date(userLocalTime);
+      } catch (e) {}
+    }
+    const year = localDateObj.getFullYear();
+    const monthStr = String(localDateObj.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(localDateObj.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${monthStr}-${dayStr}`;
+
     if (context) {
       const { tasks = [], events = [], notes = [], habits = [] } = context;
       
+      // Calculate pre-processed stats to help the AI model with 100% accuracy
+      const totalTasks = tasks.length;
+      const completedTasks = tasks.filter((t: any) => t.isCompleted).length;
+      const pendingTasksCount = tasks.filter((t: any) => !t.isCompleted).length;
+      const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      
+      const urgentPending = tasks.filter((t: any) => !t.isCompleted && (t.priority === 'urgent' || t.priority === 'critical' || t.priority === 'high'));
+      
+      const tasksDueToday = tasks.filter((t: any) => t.dueDate === todayStr);
+      const completedDueToday = tasksDueToday.filter((t: any) => t.isCompleted).length;
+      const pendingDueToday = tasksDueToday.filter((t: any) => !t.isCompleted);
+      
+      // Overdue tasks
+      const overdueTasks = tasks.filter((t: any) => !t.isCompleted && t.dueDate < todayStr);
+      // Upcoming deadlines (next 3 days)
+      const threeDaysLaterObj = new Date(localDateObj.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const y3 = threeDaysLaterObj.getFullYear();
+      const m3 = String(threeDaysLaterObj.getMonth() + 1).padStart(2, '0');
+      const d3 = String(threeDaysLaterObj.getDate()).padStart(2, '0');
+      const threeDaysLaterStr = `${y3}-${m3}-${d3}`;
+      const upcomingDeadlines = tasks.filter((t: any) => !t.isCompleted && t.dueDate > todayStr && t.dueDate <= threeDaysLaterStr);
+
+      // Habits
+      const totalHabits = habits.length;
+      const completedHabitsToday = habits.filter((h: any) => h.history && h.history[todayStr] === true).length;
+      const habitCompletionRateToday = totalHabits > 0 ? Math.round((completedHabitsToday / totalHabits) * 100) : 0;
+      const averageStreak = totalHabits > 0 ? Math.round(habits.reduce((acc: number, curr: any) => acc + (curr.streak || 0), 0) / totalHabits) : 0;
+      const bestStreakOverall = totalHabits > 0 ? Math.max(...habits.map((h: any) => h.bestStreak || 0)) : 0;
+
+      // Productivity Score Calculation
+      // Formula: 40% overall task completion + 20% today's task completion + 30% today's habit completion + 10% habit streak bonus (capped at 10)
+      const todayTaskRate = tasksDueToday.length > 0 ? (completedDueToday / tasksDueToday.length) * 100 : 100;
+      const streakBonus = Math.min(10, averageStreak);
+      const productivityScore = Math.min(100, Math.round(
+        (taskCompletionRate * 0.4) + 
+        (todayTaskRate * 0.2) + 
+        (habitCompletionRateToday * 0.3) + 
+        streakBonus
+      ));
+
+      productivityStatsStr = `
+=== PRE-COMPUTED PRODUCTIVITY STATS ===
+- Reference Local Date: ${todayStr} (Parsed from User Local Time)
+- Productivity Score: ${productivityScore}/100
+- Tasks Completion Progress: ${completedTasks}/${totalTasks} (${taskCompletionRate}%)
+- Pending Tasks Remaining: ${pendingTasksCount}
+- High/Urgent/Critical Pending Tasks: ${urgentPending.length}
+- Today's Tasks: ${tasksDueToday.length} (${completedDueToday} completed, ${pendingDueToday.length} pending)
+- Overdue Tasks: ${overdueTasks.length}
+- Upcoming Deadlines (Next 3 Days): ${upcomingDeadlines.length}
+- Habits Stats: ${completedHabitsToday}/${totalHabits} completed today (${habitCompletionRateToday}%), Average Streak: ${averageStreak} days, Best Streak: ${bestStreakOverall} days
+`;
+
       const tasksStr = tasks.length > 0 
-        ? tasks.map((t: any) => `- [${t.isCompleted ? 'x' : ' '}] ${t.title} (Priority: ${t.priority}, Category: ${t.category}, Due: ${t.dueDate})`).join('\n')
+        ? tasks.map((t: any) => {
+            const subtasksInfo = t.subtasks && t.subtasks.length > 0
+              ? ` [Subtasks: ${t.subtasks.filter((st: any) => st.isCompleted).length}/${t.subtasks.length}]`
+              : "";
+            return `- [${t.isCompleted ? 'x' : ' '}] ${t.title} (Priority: ${t.priority}, Category: ${t.category}, Due: ${t.dueDate}${t.dueTime ? ` @ ${t.dueTime}` : ''})${subtasksInfo}${t.description ? ` - Desc: ${t.description}` : ''}`;
+          }).join('\n')
         : "No tasks found.";
 
       const eventsStr = events.length > 0
-        ? events.map((e: any) => `- ${e.title} (Date: ${e.date}, Time: ${e.startTime} - ${e.endTime}, Category: ${e.category || 'None'})`).join('\n')
+        ? events.map((e: any) => `- ${e.title} (Date: ${e.date}, Time: ${e.startTime} - ${e.endTime}, Category: ${e.category || 'None'}${e.description ? `, Desc: ${e.description}` : ''})`).join('\n')
         : "No events scheduled.";
 
       const notesStr = notes.length > 0
-        ? notes.map((n: any) => `* Title: ${n.title}\n  Category: ${n.category}\n  Content: ${n.content.substring(0, 150)}${n.content.length > 150 ? '...' : ''}`).join('\n\n')
+        ? notes.map((n: any) => `* Title: ${n.title}\n  Category: ${n.category}\n  Tags: ${n.tags ? n.tags.join(', ') : 'None'}\n  Content: ${n.content.substring(0, 200)}${n.content.length > 200 ? '...' : ''}`).join('\n\n')
         : "No notes found.";
 
       const habitsStr = habits.length > 0
-        ? habits.map((h: any) => `- ${h.name} (Streak: ${h.streak} days, Best Streak: ${h.bestStreak} days, Frequency: ${h.frequency})`).join('\n')
+        ? habits.map((h: any) => {
+            const completedToday = h.history && h.history[todayStr] === true ? "COMPLETED" : "PENDING";
+            return `- ${h.name} (${completedToday}, Streak: ${h.streak} days, Best: ${h.bestStreak} days, Frequency: ${h.frequency})`;
+          }).join('\n')
         : "No habits tracked.";
 
       formattedContext = `
+${productivityStatsStr}
+
 === USER'S TASKS ===
 ${tasksStr}
 
@@ -185,43 +262,40 @@ ${habitsStr}
     }
 
     // Construct system instructions
-    const systemInstruction = `You are "Tasko Companion", a highly intelligent, premium, and friendly AI Companion integrated directly into the user's Productivity OS.
-Your goal is to help the user stay organized, productive, and mindful.
-
-You have direct access to the user's workspace data. Keep your responses personalized, elegant, and directly based on their actual productivity context:
+    const systemInstruction = `You are "Tasko Companion", an exceptionally intelligent, premium, and friendly AI Companion integrated directly into the user's Productivity OS.
+Your goal is to serve as a smart productivity assistant. You have direct access to the user's workspace data. Keep your responses highly personalized, elegant, and directly based on their actual productivity context:
 - Tasks: Active/completed items, priorities, due dates.
 - Calendar Events: Structured schedules.
 - Notes: Ideas, thoughts, roadmaps.
 - Habits: Streaks, completions, mindfulness practices.
 
-Rules for interaction:
-1. Maintain a natural, friendly, conversational, and highly context-aware tone.
-2. Answer questions, provide follow-up advice, or suggest tasks/habits when relevant.
-3. Be brief, clear, and highly focused. Do not output massive walls of text unless explicitly requested. Use bullet points or elegant markdown for readability. Keep recommendations brief and actionable.
-4. If the user asks about their tasks, schedule, habits, or notes, reference the provided context and offer actionable insights.
-5. If some information is missing or ambiguous, ask clarifying questions naturally.
+You possess advanced smart productivity capabilities. Whenever a user asks or implies queries about their productivity, day, or habits, immediately employ the following advanced features with highly structured, professional, and readable markdown output:
 
-CRITICAL DIRECTIVES FOR CREATING DATA (TASKS, EVENTS, HABITS, NOTES):
-6. You have specialized tools to propose/draft tasks, calendar events, habits, and notes:
-   - To create/add a Task: Call \`proposeCreateTask\`.
-   - To create/add an Event: Call \`proposeCreateEvent\`.
-   - To create/add a Habit: Call \`proposeCreateHabit\`.
-   - To create/add a Note: Call \`proposeCreateNote\`.
-7. **Always call the appropriate function tool** when the user expresses clear intent to add/create a task, event, habit, or note.
-8. **CONFLICT DETECTION & RESOLUTION**:
-   - Before drafting a new Calendar Event or a timed Task, check for overlaps or conflicts with the existing list of Calendar Events and Tasks.
-   - A calendar overlap occurs if your proposed event has the same date and its time window (startTime to endTime) overlaps with any existing event's time window.
-   - If a conflict is found, you MUST:
-     a) Explicitly inform the user about the specific conflict in your conversational response (e.g. "I found a conflict with your event 'Meeting with boss' scheduled at 10:00 - 11:30!").
-     b) Recommend a better alternative time (e.g., later in the day, or on another day).
-     c) Set the arguments of your tool call to the suggested *alternative* time rather than the conflicting one, so that the drafted confirmation proposal is ready to go with the safe slot.
-9. **Never claim to create, modify, or delete data directly or automatically**. Always explain that you have *drafted* or *proposed* the item for them, and that they can review, edit, and confirm it in the chat interface.
-10. Always provide a helpful conversational text reply alongside your tool call, explaining what you have prepared for them.
+1. **Plan My Day**: Generate a personalized daily plan. Group events chronologically, list pending high-priority tasks, active habits for today, and deadlines. Format this plan into a stunning timeline view (e.g. Morning, Afternoon, Evening focus blocks).
+2. **Smart Task Prioritization**: Recommend which task should be completed first using due dates, priority levels (urgent, high, medium, low), and subtask workloads. Always explain the reason briefly and objective for each recommendation.
+3. **Smart Scheduling**: Suggest the best available, non-conflicting time for pending tasks. Respect existing calendar events. Highlight mornings for high-focus tasks and late afternoons for lighter/administrative items.
+4. **Deadline Risk Detection**: Proactively warn users about upcoming (next 3 days) or overdue deadlines, and recommend precise next actions or mitigation steps.
+5. **Work Breakdown**: Break down any complex or large task into 3-5 manageable, highly actionable subtasks. Explain that they can review and add these steps to their workflow.
+6. **Productivity Insights**: Present beautifully formatted insights incorporating:
+   - Today's progress (completed vs pending tasks)
+   - Upcoming deadlines
+   - Habit completion rate
+   - Productivity Score (out of 100, use the pre-computed value: ${formattedContext.includes('Productivity Score:') ? 'the one in PRE-COMPUTED PRODUCTIVITY STATS' : 'calculate dynamically'})
+7. **Habit Recommendations**: Analyze the user's activities or existing habits to suggest 2-3 tailored habits that would benefit their routine (e.g., "5-Minute Desktop Stretching" or "Weekly Notes Review").
+8. **Daily Summary**: Provide a rewarding, elegant wrap-up of today's achievements, remaining tasks, and important upcoming events for tomorrow.
+9. **Weekly & Monthly Review**: Generate highly concise, structured reports summarizing completed tasks, pending work, habit streak progress, and overall productivity trends.
+
+Rules for interaction:
+- Maintain a natural, supportive, conversational, and highly context-aware tone.
+- ALWAYS use the user's actual Tasks, Calendar, Notes, and Habits whenever possible instead of giving generic responses.
+- Be brief, clear, and highly focused. Do not output massive walls of text unless requested. Use structured headings, checklists, and elegant markdown with bullet points for ultimate readability.
+- **NEVER claim to create, modify, or delete any Task, Event, Note, or Habit without user confirmation.** Explain that you have drafted or proposed it for them, and they can confirm or reject it directly in the chat panel.
+- Before drafting a new Calendar Event or a timed Task, check for overlaps/conflicts and suggest safe slot alternatives.
 
 Current Workspace Context:
 ${formattedContext}
 
-Current Date and Time: ${new Date().toLocaleString()}`;
+Current Date and Time: ${userLocalTime || new Date().toString()}`;
 
     // Map history to Gemini format
     // Roles in Gemini must be 'user' or 'model'

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { CalendarEvent, Task, Habit } from '../types';
+import { CalendarEvent, Task, Habit, getLocalDateString } from '../types';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -119,7 +119,7 @@ export const CalendarModule: React.FC = () => {
 
   // Fetch lists for specific dates
   const getEventsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(date);
     return events.filter(e => {
       const matchesDate = e.date === dateStr;
       const matchesSearch = searchQuery === '' || e.title.toLowerCase().includes(searchQuery.toLowerCase()) || (e.description || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -130,7 +130,7 @@ export const CalendarModule: React.FC = () => {
   };
 
   const getTasksForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(date);
     return tasks.filter(t => {
       const matchesDate = t.dueDate === dateStr;
       const matchesSearch = searchQuery === '' || t.title.toLowerCase().includes(searchQuery.toLowerCase()) || (t.description || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -143,7 +143,7 @@ export const CalendarModule: React.FC = () => {
   const getHabitsForDate = (date: Date) => {
     // Habits are continuous, we display active habits on this weekday
     const dayOfWeek = date.toLocaleDateString([], { weekday: 'long' }).toLowerCase(); // 'monday', 'tuesday', etc.
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(date);
     return habits.filter(h => {
       const matchesSearch = searchQuery === '' || h.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = categoryFilter === 'all' || h.category === categoryFilter;
@@ -162,7 +162,7 @@ export const CalendarModule: React.FC = () => {
   };
 
   // Selected Day summary listings
-  const selectedDateStr = selectedDate.toISOString().split('T')[0];
+  const selectedDateStr = getLocalDateString(selectedDate);
   const selectedDateEvents = getEventsForDate(selectedDate);
   const selectedDateTasks = getTasksForDate(selectedDate);
   const selectedDateHabits = getHabitsForDate(selectedDate);

@@ -9,6 +9,9 @@ export interface Attachment {
   name: string;
   url: string;
   size?: string;
+  mimeType?: string;
+  base64Data?: string;
+  textData?: string;
 }
 
 export interface Task {
@@ -105,6 +108,7 @@ export interface ChatMessage {
     data: any;
     status?: 'pending' | 'confirmed' | 'cancelled';
   };
+  attachments?: Attachment[];
 }
 
 export interface ChatSession {
@@ -115,4 +119,30 @@ export interface ChatSession {
   updatedAt: string;
   userId: string;
 }
+
+/**
+ * Robust date formatting and parsing helpers to handle user local timezone consistently.
+ * Prevents calendar dates from shifting due to UTC conversions.
+ */
+
+export function getLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function parseLocalDateString(dateStr: string): Date {
+  if (!dateStr) return new Date();
+  // Expecting YYYY-MM-DD or similar
+  const parts = dateStr.split('T')[0].split('-');
+  if (parts.length === 3) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+    const day = parseInt(parts[2], 10);
+    return new Date(year, month, day);
+  }
+  return new Date(dateStr);
+}
+
 

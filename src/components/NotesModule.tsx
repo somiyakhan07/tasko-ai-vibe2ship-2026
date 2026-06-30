@@ -296,24 +296,6 @@ export const NotesModule: React.FC = () => {
   const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
-  const [savedRange, setSavedRange] = useState<Range | null>(null);
-
-  const saveSelection = () => {
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      setSavedRange(sel.getRangeAt(0));
-    }
-  };
-
-  const restoreSelection = () => {
-    if (savedRange) {
-      const sel = window.getSelection();
-      if (sel) {
-        sel.removeAllRanges();
-        sel.addRange(savedRange);
-      }
-    }
-  };
 
   // Synchronize first note selection if none is active
   useEffect(() => {
@@ -322,8 +304,8 @@ export const NotesModule: React.FC = () => {
     }
   }, [selectedNoteId, notes, setSelectedNoteId]);
   
-  // Editor View Mode: 'wysiwyg' | 'markdown' | 'preview'
-  const [editorMode, setEditorMode] = useState<'wysiwyg' | 'markdown' | 'preview'>('wysiwyg');
+  // Editor View Mode: 'markdown' | 'preview'
+  const [editorMode, setEditorMode] = useState<'markdown' | 'preview'>('markdown');
 
   // Form states
   const [formTitle, setFormTitle] = useState('');
@@ -344,10 +326,15 @@ export const NotesModule: React.FC = () => {
   const [speechError, setSpeechError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Editor Ref for ContentEditable
-  const editorRef = useRef<HTMLDivElement | null>(null);
   const currentContentRef = useRef<string>(''); // tracks live markdown content
-  const initialHtmlLoadedRef = useRef<string>(''); // tracks what we set dangerouslySetInnerHTML with
+
+  const formStateRef = useRef({
+    title: '',
+    content: '',
+    category: 'Work',
+    tagsStr: '',
+    attachments: [] as Attachment[]
+  });
 
   const categories = ['Work', 'Personal', 'Ideas', 'Reflections', 'Reference'];
   const selectedNote = notes.find(n => n.id === selectedNoteId);
@@ -362,39 +349,26 @@ export const NotesModule: React.FC = () => {
       setFormAttachments(selectedNote.attachments || []);
       currentContentRef.current = selectedNote.content;
       
-      // Load HTML for WYSIWYG editor
-      const html = markdownToHtml(selectedNote.content);
-      initialHtmlLoadedRef.current = html;
-      if (editorRef.current && editorMode === 'wysiwyg') {
-        editorRef.current.innerHTML = html;
-      }
+      formStateRef.current = {
+        title: selectedNote.title,
+        content: selectedNote.content,
+        category: selectedNote.category,
+        tagsStr: selectedNote.tags.join(', '),
+        attachments: selectedNote.attachments || []
+      };
     }
-  }, [selectedNoteId]);
-
-  // Make sure editor gets HTML if mode switches back to WYSIWYG
-  useEffect(() => {
-    if (editorMode === 'wysiwyg' && editorRef.current) {
-      const html = markdownToHtml(currentContentRef.current);
-      editorRef.current.innerHTML = html;
-    }
-  }, [editorMode]);
+  }, [selectedNoteId, selectedNote]);
 
   // Focus the editor immediately after opening
   useEffect(() => {
-    if (isEditing && editorMode === 'wysiwyg') {
+    if (isEditing && editorMode === 'markdown') {
       const focusAndEnd = () => {
-        if (editorRef.current) {
-          editorRef.current.focus();
+        const textarea = document.getElementById('note-markdown-textarea') as HTMLTextAreaElement;
+        if (textarea) {
+          textarea.focus();
           try {
-            const range = document.createRange();
-            const sel = window.getSelection();
-            range.selectNodeContents(editorRef.current);
-            range.collapse(false); // collapse to the end
-            if (sel) {
-              sel.removeAllRanges();
-              sel.addRange(range);
-            }
-            saveSelection();
+            const length = textarea.value.length;
+            textarea.setSelectionRange(length, length);
           } catch (e) {
             console.warn("Could not place cursor at end:", e);
           }
@@ -408,7 +382,7 @@ export const NotesModule: React.FC = () => {
   }, [isEditing, editorMode]);
 
   // Auto-save logic
-  const triggerAutoSave = (updatedTitle: string, updatedContent: string, updatedCategory: string, tagsStr: string, attachments: Attachment[]) => {
+  const triggerAutoSave = () => {
     if (!selectedNote) return;
     setSaveStatus('dirty');
 
@@ -418,6 +392,7 @@ export const NotesModule: React.FC = () => {
 
     setSaveStatus('saving');
     autoSaveTimerRef.current = setTimeout(() => {
+      const { title, content, category, tagsStr, attachments } = formStateRef.current;
       const tagsArray = tagsStr
         .split(',')
         .map(t => t.trim())
@@ -425,11 +400,11 @@ export const NotesModule: React.FC = () => {
 
       updateNote({
         ...selectedNote,
-        title: updatedTitle,
-        content: updatedContent,
-        category: updatedCategory,
+        title,
+        content,
+        category,
         tags: tagsArray,
-        attachments: attachments,
+        attachments,
         updatedAt: new Date().toISOString()
       });
       setSaveStatus('saved');
@@ -468,7 +443,7 @@ export const NotesModule: React.FC = () => {
     }
     setSelectedNoteId(note.id);
     setIsEditing(true);
-    setEditorMode('wysiwyg');
+    setEditorMode('markdown');
     setSaveStatus('saved');
   };
 
@@ -491,7 +466,7 @@ export const NotesModule: React.FC = () => {
       setFormAttachments([]);
       currentContentRef.current = '## New Document\nType notes here...';
       setIsEditing(true);
-      setEditorMode('wysiwyg');
+      setEditorMode('markdown');
       setSaveStatus('saved');
     }
   };
@@ -504,25 +479,23 @@ export const NotesModule: React.FC = () => {
     }
     
     // Read final content from the active editor mode
-    let finalContent = currentContentRef.current;
-    if (editorMode === 'wysiwyg' && editorRef.current) {
-      finalContent = htmlToMarkdown(editorRef.current.innerHTML);
-    } else if (editorMode === 'markdown') {
-      finalContent = formContent;
-    }
+    const finalContent = editorMode === 'markdown' ? formContent : currentContentRef.current;
+    formStateRef.current.content = finalContent;
 
-    const tagsArray = formTagsStr
+    const { title, category, tagsStr, attachments } = formStateRef.current;
+
+    const tagsArray = tagsStr
       .split(',')
       .map(tag => tag.trim())
       .filter(tag => tag.length > 0);
 
     updateNote({
       ...selectedNote,
-      title: formTitle,
+      title,
       content: finalContent,
-      category: formCategory,
+      category,
       tags: tagsArray,
-      attachments: formAttachments,
+      attachments,
       updatedAt: new Date().toISOString()
     });
 
@@ -553,25 +526,6 @@ export const NotesModule: React.FC = () => {
     }
   };
 
-  // Rich WYSIWYG command executive helper
-  const executeCommand = (command: string, value: string = '') => {
-    if (editorMode !== 'wysiwyg') return;
-    editorRef.current?.focus();
-    document.execCommand(command, false, value);
-    handleWysiwygInput();
-  };
-
-  // Handler for ContentEditable live inputs
-  const handleWysiwygInput = () => {
-    if (editorRef.current && editorMode === 'wysiwyg') {
-      const html = editorRef.current.innerHTML;
-      const md = htmlToMarkdown(html);
-      currentContentRef.current = md;
-      setFormContent(md);
-      triggerAutoSave(formTitle, md, formCategory, formTagsStr, formAttachments);
-    }
-  };
-
   // Image upload and insert logic
   const uploadAndInsertImage = async (file: File) => {
     let imageUrl = '';
@@ -590,22 +544,16 @@ export const NotesModule: React.FC = () => {
       imageUrl = URL.createObjectURL(file);
     }
 
-    if (editorMode === 'wysiwyg') {
-      editorRef.current?.focus();
-      const imgHtml = `<img src="${imageUrl}" alt="${escapeHtml(file.name)}" referrerPolicy="no-referrer" class="max-w-full h-auto rounded-2xl shadow-lg my-4 border border-slate-100 dark:border-slate-800" />`;
-      document.execCommand('insertHTML', false, imgHtml);
-      handleWysiwygInput();
-    } else {
-      const textarea = document.getElementById('note-markdown-textarea') as HTMLTextAreaElement;
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const replacement = `![${file.name}](${imageUrl})`;
-        const newContent = formContent.substring(0, start) + replacement + formContent.substring(end);
-        setFormContent(newContent);
-        currentContentRef.current = newContent;
-        triggerAutoSave(formTitle, newContent, formCategory, formTagsStr, formAttachments);
-      }
+    const textarea = document.getElementById('note-markdown-textarea') as HTMLTextAreaElement;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const replacement = `![${file.name}](${imageUrl})`;
+      const newContent = formContent.substring(0, start) + replacement + formContent.substring(end);
+      setFormContent(newContent);
+      currentContentRef.current = newContent;
+      formStateRef.current.content = newContent;
+      triggerAutoSave();
     }
     setSaveStatus('saved');
   };
@@ -624,8 +572,8 @@ export const NotesModule: React.FC = () => {
         const storageRef = ref(storage, `notes_attachments/${profile.uid}/${Date.now()}_${file.name}`);
         const snapshot = await uploadBytes(storageRef, file);
         attachmentUrl = await getDownloadURL(snapshot.ref);
-      } catch (e) {
-        console.error("Storage upload failed, fallback to local:", e);
+      } catch (err) {
+        console.error("Storage upload failed, fallback to local:", err);
         attachmentUrl = URL.createObjectURL(file);
       }
     } else {
@@ -637,20 +585,26 @@ export const NotesModule: React.FC = () => {
       id: `attach-${Date.now()}`,
       name: file.name,
       url: attachmentUrl,
-      size: `${sizeInMb} MB`
+      size: `${sizeInMb} MB`,
+      mimeType: file.type || 'application/octet-stream'
     };
 
-    const updatedAttachments = [...formAttachments, newAttachment];
+    const updatedAttachments = [...formStateRef.current.attachments, newAttachment];
     setFormAttachments(updatedAttachments);
-    triggerAutoSave(formTitle, currentContentRef.current, formCategory, formTagsStr, updatedAttachments);
+    formStateRef.current.attachments = updatedAttachments;
+    triggerAutoSave();
     setSaveStatus('saved');
+    
+    // Reset file input target value so the same file can be uploaded again
+    e.target.value = '';
   };
 
   // Delete attachment
   const handleDeleteAttachment = (attachId: string) => {
-    const updated = formAttachments.filter(a => a.id !== attachId);
+    const updated = formStateRef.current.attachments.filter(a => a.id !== attachId);
     setFormAttachments(updated);
-    triggerAutoSave(formTitle, currentContentRef.current, formCategory, formTagsStr, updated);
+    formStateRef.current.attachments = updated;
+    triggerAutoSave();
   };
 
   // Trigger file click
@@ -663,12 +617,12 @@ export const NotesModule: React.FC = () => {
   };
 
   // Drag over editor canvas
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOver = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
   };
 
   // Drop element into editor
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
@@ -680,7 +634,7 @@ export const NotesModule: React.FC = () => {
   };
 
   // Paste handler
-  const handlePaste = async (e: React.ClipboardEvent<HTMLDivElement>) => {
+  const handlePaste = async (e: React.ClipboardEvent<HTMLElement>) => {
     const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -787,22 +741,15 @@ export const NotesModule: React.FC = () => {
   };
 
   const insertTextAtCursor = (text: string) => {
-    if (editorMode === 'wysiwyg') {
-      editorRef.current?.focus();
-      restoreSelection();
-      document.execCommand('insertText', false, text);
-      saveSelection();
-      handleWysiwygInput();
-    } else {
-      const textarea = document.getElementById('note-markdown-textarea') as HTMLTextAreaElement;
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const newContent = formContent.substring(0, start) + text + formContent.substring(end);
-        setFormContent(newContent);
-        currentContentRef.current = newContent;
-        triggerAutoSave(formTitle, newContent, formCategory, formTagsStr, formAttachments);
-      }
+    const textarea = document.getElementById('note-markdown-textarea') as HTMLTextAreaElement;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newContent = formContent.substring(0, start) + text + formContent.substring(end);
+      setFormContent(newContent);
+      currentContentRef.current = newContent;
+      formStateRef.current.content = newContent;
+      triggerAutoSave();
     }
   };
 
@@ -811,34 +758,22 @@ export const NotesModule: React.FC = () => {
     setIsLinkDialogOpen(false);
     if (!linkUrl) return;
 
-    if (editorMode === 'wysiwyg') {
-      editorRef.current?.focus();
-      restoreSelection();
-      const textToUse = linkText.trim() || linkUrl;
-      const linkHtml = `<a href="${linkUrl}" target="_blank" rel="noopener noreferrer" class="text-indigo-600 dark:text-indigo-400 underline font-medium hover:text-indigo-500">${escapeHtml(textToUse)}</a>`;
-      document.execCommand('insertHTML', false, linkHtml);
-      saveSelection();
-      handleWysiwygInput();
-    } else {
-      const textarea = document.getElementById('note-markdown-textarea') as HTMLTextAreaElement;
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const textToUse = linkText.trim() || textarea.value.substring(start, end) || linkUrl;
-        const replacement = `[${textToUse}](${linkUrl})`;
-        const newContent = formContent.substring(0, start) + replacement + formContent.substring(end);
-        setFormContent(newContent);
-        currentContentRef.current = newContent;
-        triggerAutoSave(formTitle, newContent, formCategory, formTagsStr, formAttachments);
-      }
+    const textarea = document.getElementById('note-markdown-textarea') as HTMLTextAreaElement;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const textToUse = linkText.trim() || textarea.value.substring(start, end) || linkUrl;
+      const replacement = `[${textToUse}](${linkUrl})`;
+      const newContent = formContent.substring(0, start) + replacement + formContent.substring(end);
+      setFormContent(newContent);
+      currentContentRef.current = newContent;
+      formStateRef.current.content = newContent;
+      triggerAutoSave();
     }
   };
 
   // Get active text metrics
   const getPlainContentText = (): string => {
-    if (editorMode === 'wysiwyg' && editorRef.current) {
-      return editorRef.current.innerText || '';
-    }
     return formContent || '';
   };
 
@@ -1009,7 +944,12 @@ export const NotesModule: React.FC = () => {
 
                       {/* Snippet representation */}
                       <p className="text-xs text-slate-400 dark:text-slate-500 mt-3 line-clamp-4 leading-relaxed font-sans">
-                        {note.content.replace(/[#*`_\-]/g, '').slice(0, 150)}
+                        {note.content
+                          .replace(/!\[.*?\]\(.*?\)/g, '')
+                          .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+                          .replace(/[#*`_\-<>]/g, '')
+                          .trim()
+                          .slice(0, 150)}
                         {note.content.length > 150 && '...'}
                       </p>
                     </div>
@@ -1081,20 +1021,7 @@ export const NotesModule: React.FC = () => {
                 {/* Segmented Editor Mode Controls */}
                 <div className="flex bg-slate-100 dark:bg-slate-850 p-1 rounded-2xl border border-slate-200/50 dark:border-slate-800">
                   <button
-                    onClick={() => setEditorMode('wysiwyg')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      editorMode === 'wysiwyg'
-                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-350'
-                    }`}
-                  >
-                    WYSIWYG
-                  </button>
-                  <button
                     onClick={() => {
-                      if (editorMode === 'wysiwyg' && editorRef.current) {
-                        setFormContent(htmlToMarkdown(editorRef.current.innerHTML));
-                      }
                       setEditorMode('markdown');
                     }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -1107,11 +1034,7 @@ export const NotesModule: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      if (editorMode === 'wysiwyg' && editorRef.current) {
-                        currentContentRef.current = htmlToMarkdown(editorRef.current.innerHTML);
-                      } else {
-                        currentContentRef.current = formContent;
-                      }
+                      currentContentRef.current = formContent;
                       setEditorMode('preview');
                     }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -1161,7 +1084,8 @@ export const NotesModule: React.FC = () => {
                       value={formTitle}
                       onChange={(e) => {
                         setFormTitle(e.target.value);
-                        triggerAutoSave(e.target.value, currentContentRef.current, formCategory, formTagsStr, formAttachments);
+                        formStateRef.current.title = e.target.value;
+                        triggerAutoSave();
                       }}
                       className="w-full bg-slate-50/50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-xl text-sm font-extrabold text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
@@ -1172,7 +1096,8 @@ export const NotesModule: React.FC = () => {
                       value={formCategory}
                       onChange={(e) => {
                         setFormCategory(e.target.value);
-                        triggerAutoSave(formTitle, currentContentRef.current, e.target.value, formTagsStr, formAttachments);
+                        formStateRef.current.category = e.target.value;
+                        triggerAutoSave();
                       }}
                       className="w-full bg-slate-50/50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-800 dark:text-white focus:outline-none"
                     >
@@ -1184,268 +1109,38 @@ export const NotesModule: React.FC = () => {
                 {/* EDITOR CANVAS CONTAINER */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden flex flex-col">
                   
-                  {/* WYSIWYG Formatting Toolbar */}
+                  {/* Markdown Formatting Toolbar */}
                   {editorMode !== 'preview' && (
                     <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-1.5 bg-slate-50/50 dark:bg-slate-950/40">
-                      
-                      {/* Format/Paragraph Headers */}
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('formatBlock', '<h1>')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Heading 1"
-                      >
-                        <Heading1 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('formatBlock', '<h2>')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Heading 2"
-                      >
-                        <Heading2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('formatBlock', '<h3>')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Heading 3"
-                      >
-                        <Heading3 className="w-4 h-4" />
-                      </button>
-                      
-                      <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-                      
-                      {/* Font styles */}
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('bold')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Bold (Ctrl+B)"
-                      >
-                        <Bold className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('italic')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Italic (Ctrl+I)"
-                      >
-                        <Italic className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('underline')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Underline (Ctrl+U)"
-                      >
-                        <Underline className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('strikeThrough')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Strikethrough"
-                      >
-                        <Strikethrough className="w-4 h-4" />
-                      </button>
-
-                      <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                      {/* Alignments */}
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('justifyLeft')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Align Left"
-                      >
-                        <AlignLeft className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('justifyCenter')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Align Center"
-                      >
-                        <AlignCenter className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('justifyRight')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Align Right"
-                      >
-                        <AlignRight className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('justifyFull')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Justify Text"
-                      >
-                        <AlignJustify className="w-4 h-4" />
-                      </button>
-
-                      <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                      {/* Color selectors */}
-                      <div className="relative group/color flex items-center">
-                        <button 
-                          onMouseDown={(e) => e.preventDefault()} 
-                          className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-indigo-600 flex items-center font-bold text-xs" 
-                          title="Text Color"
-                        >
-                          <Type className="w-4 h-4" />
-                          <span className="text-[9px] border border-indigo-600 rounded px-0.5 ml-0.5">T</span>
-                        </button>
-                        <div className="hidden group-hover/color:flex absolute top-full left-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 rounded-xl shadow-xl z-25 gap-1.5">
-                          {['#000000', '#ef4444', '#f97316', '#22c55e', '#3b82f6', '#6366f1', '#a855f7'].map(color => (
-                            <button
-                              key={color}
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => executeCommand('foreColor', color)}
-                              className="w-5 h-5 rounded-full border border-slate-300"
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="relative group/highlight flex items-center">
-                        <button 
-                          onMouseDown={(e) => e.preventDefault()} 
-                          className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-indigo-600 flex items-center font-bold text-xs" 
-                          title="Highlight Color"
-                        >
-                          <Type className="w-4 h-4" />
-                          <span className="text-[9px] bg-yellow-200 dark:bg-yellow-950 text-slate-900 rounded px-0.5 ml-0.5">H</span>
-                        </button>
-                        <div className="hidden group-hover/highlight:flex absolute top-full left-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 rounded-xl shadow-xl z-25 gap-1.5">
-                          {['#ffffff', '#fef08a', '#bbf7d0', '#bfdbfe', '#e9d5ff', '#fed7aa', '#fecdd3'].map(color => (
-                            <button
-                              key={color}
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => executeCommand('backColor', color)}
-                              className="w-5 h-5 rounded-full border border-slate-300"
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                      {/* Lists & structural nodes */}
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('insertUnorderedList')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Bullet List"
-                      >
-                        <List className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('insertOrderedList')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Numbered List"
-                      >
-                        <ListOrdered className="w-4 h-4" />
-                      </button>
-                      
-                      {/* Checkbox Injector */}
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => {
-                          if (editorMode === 'wysiwyg') {
-                            const checklistHtml = `<li class="flex items-center gap-2 list-none my-1"><input type="checkbox" class="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" /> <span>New action item</span></li>`;
-                            executeCommand('insertHTML', checklistHtml);
-                          } else {
-                            insertTextAtCursor('\n- [ ] Checklist item');
-                          }
-                        }} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Checklist item"
-                      >
-                        <CheckSquare className="w-4 h-4" />
-                      </button>
-
-                      {/* Blockquote and Code blocks */}
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => {
-                          if (editorMode === 'wysiwyg') {
-                            const blockquoteHtml = `<blockquote class="border-l-4 border-indigo-500 pl-4 py-1.5 my-3 italic text-slate-600 dark:text-slate-400">Blockquote</blockquote><p><br></p>`;
-                            executeCommand('insertHTML', blockquoteHtml);
-                          } else {
-                            insertTextAtCursor('\n> Blockquote');
-                          }
-                        }} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Block Quote"
-                      >
-                        <FolderOpen className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => {
-                          if (editorMode === 'wysiwyg') {
-                            const codeBlockHtml = `<pre class="bg-slate-100 dark:bg-slate-900 p-4 rounded-xl font-mono text-xs overflow-x-auto my-3 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800"><code>Code block</code></pre><p><br></p>`;
-                            executeCommand('insertHTML', codeBlockHtml);
-                          } else {
-                            insertTextAtCursor('\n```\nCode Block\n```\n');
-                          }
-                        }} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Code Block"
-                      >
-                        <Code className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('insertHorizontalRule')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
-                        title="Horizontal rule"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
-
-                      <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                      {/* Undo / Redo */}
-                      <button 
-                        onMouseDown={(e) => e.preventDefault()} 
-                        onClick={() => executeCommand('undo')} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300 font-bold" 
-                        title="Undo (Ctrl+Z)"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-
-                      <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-
                       {/* Links and image uploads */}
                       <button 
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          saveSelection();
-                          const selText = window.getSelection() ? window.getSelection()!.toString() : '';
+                          const textarea = document.getElementById('note-markdown-textarea') as HTMLTextAreaElement | null;
+                          let selText = '';
+                          if (textarea) {
+                            const start = textarea.selectionStart;
+                            const end = textarea.selectionEnd;
+                            selText = textarea.value.substring(start, end);
+                          }
                           setLinkText(selText);
                           setLinkUrl('');
                           setIsLinkDialogOpen(true);
                         }} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
+                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300 flex items-center space-x-1.5 text-xs font-medium transition-all" 
                         title="Insert Link"
                       >
-                        <LinkIcon className="w-4 h-4" />
+                        <LinkIcon className="w-4 h-4 text-indigo-500" />
+                        <span>Insert Link</span>
                       </button>
                       <button 
                         onMouseDown={(e) => e.preventDefault()} 
                         onClick={triggerImageUpload} 
-                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300" 
+                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300 flex items-center space-x-1.5 text-xs font-medium transition-all" 
                         title="Upload & Insert Image"
                       >
-                        <ImageIcon className="w-4 h-4" />
+                        <ImageIcon className="w-4 h-4 text-indigo-500" />
+                        <span>Insert Image</span>
                       </button>
 
                       <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
@@ -1466,7 +1161,7 @@ export const NotesModule: React.FC = () => {
                       </button>
                       
                       {speechError && (
-                        <span className="text-[10px] text-rose-500 font-bold">{speechError}</span>
+                        <span className="text-[10px] text-rose-500 font-bold ml-2">{speechError}</span>
                       )}
                     </div>
                   )}
@@ -1474,24 +1169,7 @@ export const NotesModule: React.FC = () => {
                   {/* ACTIVE EDITOR CANVAS WORKSPACE */}
                   <div className="p-6 flex-1 min-h-[420px] bg-slate-50/20 dark:bg-slate-950/10">
                     
-                    {/* MODE A: WYSIWYG Editor */}
-                    {editorMode === 'wysiwyg' && (
-                      <div
-                        id="note-wysiwyg-editor"
-                        ref={editorRef}
-                        contentEditable={true}
-                        onInput={handleWysiwygInput}
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop}
-                        onPaste={handlePaste}
-                        onKeyUp={saveSelection}
-                        onMouseUp={saveSelection}
-                        onBlur={saveSelection}
-                        className="wysiwyg-editor w-full min-h-[400px] outline-none text-slate-800 dark:text-slate-100 prose prose-slate dark:prose-invert max-w-none text-sm p-4 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800 focus:ring-1 focus:ring-indigo-500 font-sans leading-relaxed"
-                        style={{ minHeight: '400px' }}
-                        dangerouslySetInnerHTML={{ __html: initialHtmlLoadedRef.current }}
-                      />
-                    )}
+                    
 
                     {/* MODE B: Raw Markdown Editor */}
                     {editorMode === 'markdown' && (
@@ -1501,7 +1179,8 @@ export const NotesModule: React.FC = () => {
                         onChange={(e) => {
                           setFormContent(e.target.value);
                           currentContentRef.current = e.target.value;
-                          triggerAutoSave(formTitle, e.target.value, formCategory, formTagsStr, formAttachments);
+                          formStateRef.current.content = e.target.value;
+                          triggerAutoSave();
                         }}
                         placeholder="Type Markdown content here... (e.g. # Header, **bold**, etc.)"
                         className="w-full min-h-[400px] bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 dark:text-white resize-none leading-relaxed"
@@ -1513,7 +1192,27 @@ export const NotesModule: React.FC = () => {
                     {editorMode === 'preview' && (
                       <div className="bg-white dark:bg-slate-950 p-6 border border-slate-100 dark:border-slate-850 rounded-2xl min-h-[400px] prose prose-slate dark:prose-invert max-w-none text-xs text-slate-700 dark:text-slate-350 leading-relaxed font-sans">
                         <div className="markdown-body">
-                          <ReactMarkdown>{currentContentRef.current}</ReactMarkdown>
+                          <ReactMarkdown
+                            components={{
+                              a: ({ node, ...props }) => (
+                                <a
+                                  {...props}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-indigo-600 dark:text-indigo-400 underline font-semibold hover:text-indigo-500 transition-colors"
+                                />
+                              ),
+                              img: ({ node, ...props }) => (
+                                <img
+                                  {...props}
+                                  referrerPolicy="no-referrer"
+                                  className="max-w-full h-auto rounded-xl shadow-md my-3 border border-slate-200 dark:border-slate-800"
+                                />
+                              ),
+                            }}
+                          >
+                            {formContent}
+                          </ReactMarkdown>
                         </div>
                       </div>
                     )}
@@ -1551,7 +1250,8 @@ export const NotesModule: React.FC = () => {
                       value={formTagsStr}
                       onChange={(e) => {
                         setFormTagsStr(e.target.value);
-                        triggerAutoSave(formTitle, currentContentRef.current, formCategory, e.target.value, formAttachments);
+                        formStateRef.current.tagsStr = e.target.value;
+                        triggerAutoSave();
                       }}
                       placeholder="e.g. design, sprint, guide"
                       className="w-full bg-slate-50/50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none"
@@ -1596,20 +1296,31 @@ export const NotesModule: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                      {formAttachments.map((file) => (
-                        <div 
-                          key={file.id} 
-                          className="p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200/40 dark:border-slate-850 rounded-xl flex items-center justify-between gap-2"
-                        >
-                          <div className="overflow-hidden min-w-0 flex items-center space-x-2">
-                            <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate" title={file.name}>
-                                {file.name}
-                              </p>
-                              {file.size && <p className="text-[9px] font-mono text-slate-400">{file.size}</p>}
+                      {formAttachments.map((file) => {
+                        const isImage = file.mimeType?.startsWith('image/') || file.name.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+                        return (
+                          <div 
+                            key={file.id} 
+                            className="p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200/40 dark:border-slate-850 rounded-xl flex items-center justify-between gap-2"
+                          >
+                            <div className="overflow-hidden min-w-0 flex items-center space-x-2">
+                              {isImage ? (
+                                <img 
+                                  src={file.url} 
+                                  alt={file.name}
+                                  className="w-8 h-8 object-cover rounded-lg border border-slate-200/50 dark:border-slate-800 flex-shrink-0"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate" title={file.name}>
+                                  {file.name}
+                                </p>
+                                {file.size && <p className="text-[9px] font-mono text-slate-400">{file.size}</p>}
+                              </div>
                             </div>
-                          </div>
 
                           <div className="flex items-center space-x-1 flex-shrink-0">
                             <a 
@@ -1630,7 +1341,8 @@ export const NotesModule: React.FC = () => {
                             </button>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

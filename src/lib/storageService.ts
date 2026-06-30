@@ -1,4 +1,4 @@
-import { Task, CalendarEvent, Note, Habit, AppNotification, UserProfile, AppSettings, ChatMessage, ChatSession } from '../types';
+import { Task, CalendarEvent, Note, Habit, AppNotification, UserProfile, AppSettings, ChatMessage, ChatSession, getLocalDateString } from '../types';
 
 const STORAGE_KEYS = {
   TASKS: 'tasko_tasks',
@@ -459,8 +459,8 @@ function recalculateStreak(habit: Habit): void {
     return;
   }
 
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const today = getLocalDateString(new Date());
+  const yesterday = getLocalDateString(new Date(Date.now() - 86400000));
 
   // If last completed is neither today nor yesterday, streak is broken
   const hasCompletedRecent = history[today] || history[yesterday];
@@ -474,7 +474,7 @@ function recalculateStreak(habit: Habit): void {
   let checkDate = history[today] ? new Date() : new Date(Date.now() - 86400000);
 
   while (true) {
-    const dateStr = checkDate.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(checkDate);
     if (history[dateStr]) {
       currentStreak++;
       checkDate.setDate(checkDate.getDate() - 1);

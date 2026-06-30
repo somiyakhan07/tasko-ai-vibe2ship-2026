@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, SubTask, Attachment } from '../types';
+import { Task, SubTask, Attachment, getLocalDateString } from '../types';
 import { 
   Plus, 
   Search, 
@@ -52,7 +52,7 @@ export const TasksModule: React.FC = () => {
   // Form states
   const [formTitle, setFormTitle] = useState('');
   const [formDesc, setFormDesc] = useState('');
-  const [formDueDate, setFormDueDate] = useState(new Date().toISOString().split('T')[0]);
+  const [formDueDate, setFormDueDate] = useState(getLocalDateString(new Date()));
   const [formDueTime, setFormDueTime] = useState('12:00');
   const [formPriority, setFormPriority] = useState<Task['priority']>('medium');
   const [formCategory, setFormCategory] = useState('Work');
@@ -110,7 +110,7 @@ export const TasksModule: React.FC = () => {
     }
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString(new Date());
 
   // Filters logic
   const filteredTasks = tasks.filter(task => {
@@ -153,7 +153,7 @@ export const TasksModule: React.FC = () => {
   const handleOpenAdd = () => {
     setFormTitle('');
     setFormDesc('');
-    setFormDueDate(new Date().toISOString().split('T')[0]);
+    setFormDueDate(getLocalDateString(new Date()));
     setFormDueTime('12:00');
     setFormPriority('medium');
     setFormCategory('Work');
