@@ -119,7 +119,7 @@ From organizing your day to detecting upcoming deadlines and generating personal
 
 
 - Tasks
-- <img width="1901" height="783" alt="Screenshot 2026-06-30 202909" src="https://github.com/user-attachments/assets/e820bc49-e474-4463-acee-6ae80ef3f2e5" />
+<img width="1901" height="783" alt="Screenshot 2026-06-30 202909" src="https://github.com/user-attachments/assets/e820bc49-e474-4463-acee-6ae80ef3f2e5" />
 
 
 - Calendar
