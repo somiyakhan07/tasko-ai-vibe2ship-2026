@@ -2,11 +2,12 @@
 ### Never Miss What Matters.
 
 <img width="1254" height="1254" alt="photo_2026-06-30_20-41-43" src="https://github.com/user-attachments/assets/8e0787d5-645e-4920-9715-47ae9d976e59" />
+
 ![React](https://img.shields.io/badge/React-19-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 ![Firebase](https://img.shields.io/badge/Firebase-orange)
 ![Gemini](https://img.shields.io/badge/Google-Gemini%202.5%20Flash-blue)
-![Hackathon](https://img.shields.io/badge/Vibe2Ship-2026-success)
+![Hackathon](https://img.shields.io/badge/Vibe2Ship-2026-success)uccess)
 
 Tasko AI is an AI-powered productivity assistant built for the Google AI Studio Vibe2Ship 2026 Hackathon.
 
