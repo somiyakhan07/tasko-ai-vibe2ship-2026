@@ -1,0 +1,6 @@
+{
+  "name": "Tasko AI",
+  "description": "A premium and modern productivity application with task management, calendar events, personal notes, habit tracking, analytics, and settings.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

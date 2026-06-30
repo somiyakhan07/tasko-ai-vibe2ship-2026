@@ -1,0 +1,127 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // Global safety catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Core helper primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+    
+    function isVerifiedUser() {
+      return isSignedIn();
+    }
+
+    // Validation functions for each entity
+    function isValidTask(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.description is string && data.description.size() <= 5000
+          && data.isCompleted is bool
+          && data.dueDate is string && data.dueDate.size() <= 32
+          && data.priority is string
+          && data.category is string && data.category.size() <= 100
+          && data.userId == request.auth.uid
+          && data.createdAt is string && data.createdAt.size() <= 64;
+    }
+    
+    function isValidCalendarEvent(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.description is string && data.description.size() <= 5000
+          && data.date is string && data.date.size() <= 32
+          && data.startTime is string && data.startTime.size() <= 32
+          && data.endTime is string && data.endTime.size() <= 32
+          && data.color is string && data.color.size() <= 64
+          && data.userId == request.auth.uid
+          && data.createdAt is string && data.createdAt.size() <= 64;
+    }
+    
+    function isValidNote(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.content is string && data.content.size() <= 50000
+          && data.category is string && data.category.size() <= 100
+          && data.isPinned is bool
+          && data.tags is list && data.tags.size() <= 50
+          && data.userId == request.auth.uid
+          && data.createdAt is string && data.createdAt.size() <= 64
+          && data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+    
+    function isValidHabit(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.name is string && data.name.size() <= 200
+          && data.description is string && data.description.size() <= 5000
+          && data.frequency is string
+          && data.category is string && data.category.size() <= 100
+          && data.streak is int
+          && data.bestStreak is int
+          && (data.lastCompleted == null || (data.lastCompleted is string && data.lastCompleted.size() <= 32))
+          && data.history is map
+          && data.userId == request.auth.uid
+          && data.createdAt is string && data.createdAt.size() <= 64;
+    }
+    
+    function isValidNotification(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.content is string && data.content.size() <= 5000
+          && data.type is string
+          && data.isRead is bool
+          && data.createdAt is string && data.createdAt.size() <= 64
+          && data.userId == request.auth.uid;
+    }
+
+    // Rules for individual collections
+    match /tasks/{taskId} {
+      allow read, delete: if isSignedIn() && isOwner(existing().userId);
+      allow create: if isVerifiedUser() && isValidId(taskId) && isValidTask(incoming());
+      allow update: if isVerifiedUser() && isValidId(taskId) && isOwner(existing().userId) && isValidTask(incoming()) && incoming().userId == existing().userId;
+    }
+    
+    match /events/{eventId} {
+      allow read, delete: if isSignedIn() && isOwner(existing().userId);
+      allow create: if isVerifiedUser() && isValidId(eventId) && isValidCalendarEvent(incoming());
+      allow update: if isVerifiedUser() && isValidId(eventId) && isOwner(existing().userId) && isValidCalendarEvent(incoming()) && incoming().userId == existing().userId;
+    }
+    
+    match /notes/{noteId} {
+      allow read, delete: if isSignedIn() && isOwner(existing().userId);
+      allow create: if isVerifiedUser() && isValidId(noteId) && isValidNote(incoming());
+      allow update: if isVerifiedUser() && isValidId(noteId) && isOwner(existing().userId) && isValidNote(incoming()) && incoming().userId == existing().userId;
+    }
+    
+    match /habits/{habitId} {
+      allow read, delete: if isSignedIn() && isOwner(existing().userId);
+      allow create: if isVerifiedUser() && isValidId(habitId) && isValidHabit(incoming());
+      allow update: if isVerifiedUser() && isValidId(habitId) && isOwner(existing().userId) && isValidHabit(incoming()) && incoming().userId == existing().userId;
+    }
+    
+    match /notifications/{notificationId} {
+      allow read, delete: if isSignedIn() && isOwner(existing().userId);
+      allow create: if isVerifiedUser() && isValidId(notificationId) && isValidNotification(incoming());
+      allow update: if isVerifiedUser() && isValidId(notificationId) && isOwner(existing().userId) && isValidNotification(incoming()) && incoming().userId == existing().userId;
+    }
+  }
+}

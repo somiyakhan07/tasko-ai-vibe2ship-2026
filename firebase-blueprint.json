@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "Task": {
+      "title": "Task",
+      "description": "A productivity task representing an actionable item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "isCompleted": { "type": "boolean" },
+        "dueDate": { "type": "string" },
+        "dueTime": { "type": "string" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent", "critical"] },
+        "category": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "recurring": { "type": "string", "enum": ["none", "daily", "weekly", "monthly"] },
+        "subtasks": { "type": "array" },
+        "attachments": { "type": "array" },
+        "progress": { "type": "integer" }
+      },
+      "required": ["id", "title", "isCompleted", "dueDate", "priority", "category", "userId", "createdAt"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "An event on the user's calendar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "color": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent", "critical"] },
+        "category": { "type": "string" }
+      },
+      "required": ["id", "title", "date", "startTime", "endTime", "color", "userId", "createdAt"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "A user note or memo with potential rich content and tagging",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "isPinned": { "type": "boolean" },
+        "tags": { "type": "array" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "content", "category", "isPinned", "tags", "userId", "createdAt", "updatedAt"]
+    },
+    "Habit": {
+      "title": "Habit",
+      "description": "A habit tracking goal with progress and daily logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "frequency": { "type": "string", "enum": ["daily", "weekly", "monthly"] },
+        "category": { "type": "string" },
+        "streak": { "type": "integer" },
+        "bestStreak": { "type": "integer" },
+        "lastCompleted": { "type": "string" },
+        "history": { "type": "object" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "reminderTime": { "type": "string" }
+      },
+      "required": ["id", "name", "frequency", "category", "streak", "bestStreak", "history", "userId", "createdAt"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "A system or productivity alert",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "string", "enum": ["task", "habit", "calendar", "system"] },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "title", "content", "type", "isRead", "createdAt", "userId"]
+    }
+  },
+  "firestore": {
+    "tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Individual task elements associated with a user"
+    },
+    "events/{eventId}": {
+      "schema": "CalendarEvent",
+      "description": "Calendar events associated with a user"
+    },
+    "notes/{noteId}": {
+      "schema": "Note",
+      "description": "Personal note documents associated with a user"
+    },
+    "habits/{habitId}": {
+      "schema": "Habit",
+      "description": "Habit entities and daily histories associated with a user"
+    },
+    "notifications/{notificationId}": {
+      "schema": "AppNotification",
+      "description": "System or local trigger alerts associated with a user"
+    }
+  }
+}
