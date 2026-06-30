@@ -113,23 +113,30 @@ From organizing your day to detecting upcoming deadlines and generating personal
 <img width="1909" height="809" alt="Screenshot 2026-06-30 202635" src="https://github.com/user-attachments/assets/d08866b8-b79a-44d3-92d4-cf3ade058a36" />
 <img width="1899" height="810" alt="Screenshot 2026-06-30 202804" src="https://github.com/user-attachments/assets/0f85d6ec-e658-4c58-98bc-9581732dd0e5" />
 
+
 - AI Companion
 <img width="1919" height="806" alt="Screenshot 2026-06-30 202846" src="https://github.com/user-attachments/assets/e47d7f08-143c-4a8d-adcc-b1ac308799e2" />
+
 
 - Tasks
 - <img width="1901" height="783" alt="Screenshot 2026-06-30 202909" src="https://github.com/user-attachments/assets/e820bc49-e474-4463-acee-6ae80ef3f2e5" />
 
+
 - Calendar
 <img width="1913" height="813" alt="Screenshot 2026-06-30 202951" src="https://github.com/user-attachments/assets/24b32fcc-a5d1-4564-952b-79da1e5da877" />
+
 
 - Notes
 <img width="1920" height="817" alt="Screenshot 2026-06-30 203020" src="https://github.com/user-attachments/assets/6e637825-d682-45bb-92c8-959010468154" />
 
+
 - Habits
 <img width="1918" height="805" alt="Screenshot 2026-06-30 203044" src="https://github.com/user-attachments/assets/d4d97f4d-74de-4405-a8ff-26c094c55b04" />
 
+
 - Analytics
 <img width="1913" height="807" alt="Screenshot 2026-06-30 203111" src="https://github.com/user-attachments/assets/767770b1-618c-4ae4-8662-4960e6a6c3fc" />
+
 
 - Notifications
 <img width="1914" height="805" alt="Screenshot 2026-06-30 204730" src="https://github.com/user-attachments/assets/eef846e6-c477-4f1b-9dae-a6dbef03ba3e" />
